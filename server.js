@@ -1,22 +1,41 @@
 const express = require('express');
 const cors = require('cors');
-const pool = require('./db');
+const { Pool } = require('pg');
+const path = require('path');  // <--- NUEVO: Para manejar rutas de archivos
+require('dotenv').config();
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// ========== RUTAS PÚBLICAS (Para turistas) ==========
+// Configuración de la base de datos en Neon
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false  // Necesario para Neon
+    }
+});
+
+// Probar conexión
+pool.connect((err) => {
+    if (err) {
+        console.error('❌ Error al conectar a Neon:', err.stack);
+    } else {
+        console.log('✅ Conectado exitosamente a Neon (PostgreSQL)');
+    }
+});
+
+// ========== RUTAS PÚBLICAS ==========
 
 // Ruta de prueba
 app.get('/', (req, res) => {
     res.json({ message: '¡Servidor CIBIOMA funcionando! 🚀' });
 });
 
-// Obtener todas las especies (con filtro opcional por categoría)
+// Obtener todas las especies
 app.get('/api/especies', async (req, res) => {
     try {
         const { categoria } = req.query;
@@ -187,6 +206,18 @@ app.delete('/api/admin/especies/:id', async (req, res) => {
         res.status(500).json({ error: 'Error al eliminar especie' });
     }
 });
+
+// ========== SERVIR FRONTEND (PARA PRODUCCIÓN) ==========
+// Esto solo se activa en Vercel (producción)
+if (process.env.NODE_ENV === 'production' || process.env.VERCEL === '1') {
+    const frontendPath = path.join(__dirname, '../frontend/dist');
+    app.use(express.static(frontendPath));
+    
+    // Para cualquier ruta que no sea /api, servir index.html
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(frontendPath, 'index.html'));
+    });
+}
 
 // Iniciar el servidor
 app.listen(PORT, () => {
